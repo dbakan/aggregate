@@ -19,6 +19,8 @@ class CreateProductOrdersTable extends Migration
             $table->integer('order_id')->unsigned();
             $table->integer('quantity');
             $table->integer('price');
+            $table->integer('discount')->default(0);
+            $table->integer('comment')->nullable();
         });
     }
 
