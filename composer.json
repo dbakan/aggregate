@@ -16,6 +16,7 @@
     ],
     "require": {
         "php": "^7.3",
+        "laravel/framework": "8.11.2",
         "illuminate/database": "~8.0"
     },
     "require-dev": {
