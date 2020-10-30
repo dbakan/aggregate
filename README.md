@@ -1,49 +1,41 @@
-# Aggregate
+# Aggregate (WIP)
 
 Laravel Eloquent allows you to query the count of a relationship using `withCount`. Aggregate extends Eloquent by adding `withSum`, `withAvg`, `withMin` and `withMax`.
 
-This is based off the work in [`laravel/framework#25319`](https://github.com/laravel/framework/pull/25319) - thanks to Mohammad Sharif Ahrari ([@spyp](https://github.com/spyp)).
+This is based off the work in [dwightwatson/aggregate](https://github.com/dwightwatson/aggregate).
+which is based off the work in [`laravel/framework#25319`](https://github.com/laravel/framework/pull/25319).
 
 ## Installation
 
-You can install the package via Composer:
-
-```bash
-composer require watson/aggregate
-```
-
 ## Usage
 
-The additional methods will be added by Laravel's autodiscovery feature. You can then use them the same way you already use `withCount`. [See the Laravel documentation for more on how this works](https://laravel.com/docs/5.7/eloquent-relationships#counting-related-models).
-
 ```php
-$orders = Order::withSum('products', 'quantity')->get();
-
-$orders->each(function ($order) {
-    $order->products_sum;
-});
-```
-
-You can also select multiple aggregates in a single query, as well as alias them.
-
-```php
-$orders = Order::withCount('products')->withSum('products as products_price', 'price')->get();
-
-$orders->each(function ($order) {
-    $order->products_count;
-
-    $order->products_price;
-});
+Order::withSum('items.id as total_items', 'items.price', 'items.quantity');
 ```
 
 ```php
-$orders = Order::withCount('products')->withMax('products', 'price')->get();
+Order::withSum([
+    'items.id as total_items', 
+    'items.price',
+    'items.quantity', 
+    'items.quantity as downloadable_count' => function($query) {
+        $query->where('is_downloadable', true);
+    }, 
+]);
+```
 
-$orders->each(function ($order) {
-    $order->products_count;
-
-    $order->products_max;
-});
+```php
+Order::withAggregate([
+    'products' => 'count',
+    'products.* AS count_total' => 'count',
+    'products.comment AS count_commented' => 'count',
+    'products.quantity' => 'sum',
+    'products.price as custom_price_aggr' => function($query) {
+        $query->select(\DB::raw('SUM(product_orders.quantity*product_orders.price)'));
+    },
+    'products.discount' => 'MAX',
+    'products.quantity as quantity_list' => 'group_concat',
+]);
 ```
 
 ### Testing

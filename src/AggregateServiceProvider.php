@@ -46,27 +46,12 @@ class AggregateServiceProvider extends ServiceProvider
          * @param  array  $relations
          * @return array
          */
+        /*
         EloquentBuilder::macro('parseWithAggregateRelations', function ($relations) {
-            $results = [];
-
-            foreach ($relations as $name => $constraints) {
-                // If the "name" value is a numeric key, we can assume that no
-                // constraints have been specified. We'll just put an empty
-                // Closure there, so that we can treat them all the same.
-                if (is_numeric($name)) {
-                    $name = $constraints;
-                    $constraints = static function () {
-                        //
-                    };
-                }
-
-                $results[$name] = $constraints;
-            }
-
-            return $results;
         });
+        */
 
-        EloquentBuilder::macro('withAggregate', function ($relations, $aggregate, $aggregateAlias = null) {
+        EloquentBuilder::macro('withAggregate', function ($relations) {
             if (empty($relations)) {
                 return $this;
             }
@@ -77,48 +62,75 @@ class AggregateServiceProvider extends ServiceProvider
 
             $relations = is_array($relations) ? $relations : [$relations];
 
-            foreach ($this->parseWithAggregateRelations($relations) as $name => $constraints) {
+            foreach ($relations as $name => $constraints) {
+
+                if (is_numeric($name)) {
+                    throw new \Exception("no numeric keys here.");
+                }
+
                 $segments = explode(' ', $name);
 
                 if (count($segments) == 3 && Str::lower($segments[1]) == 'as') {
                     list($name, $alias) = [$segments[0], $segments[2]];
+                } else {
+                    $alias = null;
                 }
 
                 if (Str::contains($name, '.')) {
                     list($relationName, $column) = explode('.', $name, 2);
                 } else {
+                    // TODO: throw exception to force even COUNT() to wrap this itself
                     $relationName = $name;
-                    $column = null;
+                    $column = '*';
                 }
 
                 $relation = $this->getRelationWithoutConstraints($relationName);
 
+                if ( is_string($constraints) ) {
+                    $aggregateAlias = $constraints;
+                    $columns = new Expression("$constraints(".(
+                        $column === '*'
+                        ? $column
+                        : $relation->getRelated()->qualifyColumn($column)
+                    ).")");
+                    $constraints = static function ($query) use($constraints, $column, $relation) {
+                        // $query->select("$constraints(".$relation->getRelated()->qualifyColumn($column).")");
+                    };
+                } else {
+                    // dd([$name, $constraints]);
+                    // $columns = $constraints->columns;
+                    $aggregateAlias = 'aggregate';
+                    $columns = null;
+                }
+
+
                 $query = $relation->getRelationExistenceAggregatesQuery(
                     $relation->getRelated()->newQuery(),
                     $this,
-                    $aggregate,
-                    (
-                        is_null($column) || $column === '*'
-                        ? $column
-                        : $relation->getRelated()->qualifyColumn($column)
-                    )
+                    $constraints,
+                    $columns
+                    // (
+                    //     is_null($column) || $column === '*'
+                    //     ? $column
+                    //     : $relation->getRelated()->qualifyColumn($column)
+                    // )
                 );
-                // var_dump([$query->toSql(), $relation->getRelated()->qualifyColumn($column)]);
 
                 $query->callScope($constraints);
 
                 $query = $query->mergeConstraintsFrom($relation->getQuery())->toBase();
 
-                if (count($query->columns) > 1) {
-                    $query->columns = [$query->columns[0]];
-                }
+                // if (count($query->columns) > 1) {
+                //     $query->columns = [$query->columns[0]];
+                // }
 
                 // $columnAlias = $alias ?? Str::snake($relationName.'_'.strtolower($aggregate)).($column !== '*' ? '_'.$column : '');
                 $columnAlias = $alias ?? Str::snake(
                     collect([
                         $relationName,
-                        $aggregateAlias ?? strtolower($aggregate),
+                        // $query->columns[0],
                         (Str::endsWith($column, '*') ? null : $column),
+                        strtolower($aggregateAlias),
                     ])
                     ->filter()
                     ->join('_')
@@ -155,30 +167,46 @@ class AggregateServiceProvider extends ServiceProvider
             return $this->withAggregate($results, 'count');
         });
 
+        EloquentBuilder::macro('wrapBasicAggregate', function ($relations, $functionName) {
+            $relations = is_array($relations) ? $relations : [$relations];
+
+            $results = [];
+
+            foreach ($relations as $name => $constraints) {
+                if (is_numeric($name)) {
+                    $name = $constraints;
+                    $constraints = $functionName;
+                }
+
+                $results[$name] = $constraints;
+            }
+
+            return $this->withAggregate($results);
+        });
+
         EloquentBuilder::macro('withSum', function ($relations) {
-            // TODO: this gives NULL if no related items exist. should it give 0 instead?
-            return $this->withAggregate($relations, 'sum');
+            return $this->wrapBasicAggregate(func_get_args(), 'sum');
         });
 
         EloquentBuilder::macro('withAvg', function ($relations) {
-            return $this->withAggregate($relations, 'avg');
+            return $this->wrapBasicAggregate(func_get_args(), 'avg');
         });
 
         EloquentBuilder::macro('withMax', function ($relations) {
-            return $this->withAggregate($relations, 'max');
+            return $this->wrapBasicAggregate(func_get_args(), 'max');
         });
 
         EloquentBuilder::macro('withMin', function ($relations) {
-            return $this->withAggregate($relations, 'min');
+            return $this->wrapBasicAggregate(func_get_args(), 'min');
         });
 
-        EloquentBuilder::macro('withArray', function ($relations) {
-            return $this->withAggregate(
-                $relations,
-                $this->getQuery()->grammar->getJsonArrayAggregateFunctionName(),
-                'array'
-            );
-        });
+        // EloquentBuilder::macro('withArray', function ($relations) {
+        //     return $this->wrapBasicAggregate(
+        //         func_get_args(),
+        //         $this->getQuery()->grammar->getJsonArrayAggregateFunctionName(),
+        //         'array'
+        //     );
+        // });
     }
 
     /**
@@ -226,7 +254,8 @@ class AggregateServiceProvider extends ServiceProvider
             return $this->getRelationExistenceQuery(
                 $query,
                 $parentQuery,
-                new Expression($column ? $aggregate."({$column})" : $aggregate)
+                new Expression($column),
+                // new Expression($column ? $aggregate."({$column})" : $aggregate)
             )->setBindings([], 'select');
         });
     }

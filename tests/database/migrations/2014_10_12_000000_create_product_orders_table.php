@@ -20,7 +20,7 @@ class CreateProductOrdersTable extends Migration
             $table->integer('quantity');
             $table->integer('price');
             $table->integer('discount')->default(0);
-            $table->integer('comment')->nullable();
+            $table->string('comment')->nullable();
         });
     }
 
