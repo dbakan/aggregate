@@ -26,6 +26,12 @@ Order::withSum([
 
 ```php
 Order::withAggregate([
+    'products as product_names' => \DB::raw('GROUP_CONCAT(name)'),
+]);
+```
+
+```php
+Order::withAggregate([
     'products' => 'count',
     'products.* AS count_total' => 'count',
     'products.comment AS count_commented' => 'count',

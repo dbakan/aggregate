@@ -83,6 +83,12 @@ class AggregateServiceProvider extends ServiceProvider
                     $columns = null;
                 }
 
+                if ( $constraints instanceof Expression ) {
+                    $constraints = static function (EloquentBuilder $query) use ($constraints) {
+                        $query->select($constraints);
+                    };
+                }
+
                 $query = $relation->getRelationExistenceAggregatesQuery(
                     $relation->getRelated()->newQuery(),
                     $this,
@@ -155,6 +161,13 @@ class AggregateServiceProvider extends ServiceProvider
 
                 // we may need these later:
                 [$relationName, $column, $alias] = $this->parseWithAggregateName($name);
+
+                if ( $constraints instanceof Expression ) {
+                    $constraints = static function (EloquentBuilder $query) use ($constraints) {
+                        $query->select($constraints);
+                    };
+                }
+
                 if ( $constraints instanceof Closure ) {
                     // Inject the default sleect if non present.
                     $relation = $this->getRelationWithoutConstraints($relationName);
@@ -166,7 +179,7 @@ class AggregateServiceProvider extends ServiceProvider
                         // If not, we add the given for the `$functionName(...)`
                         if (
                             count($query->getQuery()->columns) === 1
-                            // && $query->getQuery()->columns[0] instanceof Expression
+                            && $query->getQuery()->columns[0] instanceof Expression
                             && (string)$query->getQuery()->columns[0] == ""
                         ) {
                             $columns = $query->compileAggregateFunction($relation, $functionName, $column);

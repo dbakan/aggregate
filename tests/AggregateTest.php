@@ -76,6 +76,29 @@ class AggregateTest extends TestCase
         $this->assertEquals('1,2,3,4', $actual->quantity_list);
     }
 
+    public function testWithAggregateWithConstraints()
+    {
+        $actual = Order::withAggregate([
+            'products.name AS discounted_names' => function($query) {
+                $query->select(\DB::raw('GROUP_CONCAT(name)'))
+                ->where('discount', '>', 0);
+            },
+        ])
+        ->first();
+
+        $this->assertEquals('Product 2,Product 3', $actual->discounted_names);
+    }
+
+    public function testWithAggregateWithExpression()
+    {
+        $actual = Order::select('id')->withAggregate([
+            'products as product_names' => \DB::raw('GROUP_CONCAT(name)'),
+        ])
+        ->first();
+
+        $this->assertEquals('Product 1,Product 2,Product 3,Product 4', $actual->product_names);
+    }
+
     public function testWithAggregateForCountVariants()
     {
         $sqls = [];
