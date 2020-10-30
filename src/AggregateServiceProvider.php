@@ -142,6 +142,22 @@ class AggregateServiceProvider extends ServiceProvider
             return $this;
         });
 
+        EloquentBuilder::macro('wrapBasicAggregate', function ($relations, $functionName) {
+            $relations = is_array($relations) ? $relations : [$relations];
+
+            $results = [];
+
+            foreach ($relations as $name => $constraints) {
+                if (is_numeric($name)) {
+                    $name = $constraints;
+                    $constraints = $functionName;
+                }
+                $results[$name] = $constraints;
+            }
+
+            return $this->withAggregate($results);
+        });
+
         EloquentBuilder::macro('withCounty', function ($relations) {
             $relations = is_array($relations) ? $relations : [$relations];
             // Add optional '.*' for convienience (typo??)
@@ -167,46 +183,33 @@ class AggregateServiceProvider extends ServiceProvider
             return $this->withAggregate($results, 'count');
         });
 
-        EloquentBuilder::macro('wrapBasicAggregate', function ($relations, $functionName) {
-            $relations = is_array($relations) ? $relations : [$relations];
-
-            $results = [];
-
-            foreach ($relations as $name => $constraints) {
-                if (is_numeric($name)) {
-                    $name = $constraints;
-                    $constraints = $functionName;
-                }
-
-                $results[$name] = $constraints;
-            }
-
-            return $this->withAggregate($results);
-        });
-
         EloquentBuilder::macro('withSum', function ($relations) {
-            return $this->wrapBasicAggregate(func_get_args(), 'sum');
+            $relations = is_array($relations) ? $relations : func_get_args();
+            return $this->wrapBasicAggregate($relations, 'sum');
         });
 
         EloquentBuilder::macro('withAvg', function ($relations) {
-            return $this->wrapBasicAggregate(func_get_args(), 'avg');
+            $relations = is_array($relations) ? $relations : func_get_args();
+            return $this->wrapBasicAggregate($relations, 'avg');
         });
 
         EloquentBuilder::macro('withMax', function ($relations) {
-            return $this->wrapBasicAggregate(func_get_args(), 'max');
+            $relations = is_array($relations) ? $relations : func_get_args();
+            return $this->wrapBasicAggregate($relations, 'max');
         });
 
         EloquentBuilder::macro('withMin', function ($relations) {
-            return $this->wrapBasicAggregate(func_get_args(), 'min');
+            $relations = is_array($relations) ? $relations : func_get_args();
+            return $this->wrapBasicAggregate($relations, 'min');
         });
 
-        // EloquentBuilder::macro('withArray', function ($relations) {
-        //     return $this->wrapBasicAggregate(
-        //         func_get_args(),
-        //         $this->getQuery()->grammar->getJsonArrayAggregateFunctionName(),
-        //         'array'
-        //     );
-        // });
+        EloquentBuilder::macro('withArray', function ($relations) {
+            return $this->wrapBasicAggregate(
+                func_get_args(),
+                $this->getQuery()->grammar->getJsonArrayAggregateFunctionName(),
+                'array'
+            );
+        });
     }
 
     /**

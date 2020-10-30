@@ -149,16 +149,13 @@ class AggregateTest extends TestCase
         $actual = Order::withSum('products.id', 'products.quantity', 'products.price')
         ->first();
 
-        dd($actual->toArray());
-
-        $expected = DB::select(
-            DB::raw('select (select sum(quantity) from "product_orders" where "orders"."id" = "product_orders"."order_id") as "products_quantity_sum" from "orders"')
-        )[0];
+        // dd($actual->toArray());
+        // dd($actual->products_quantity_sum);
 
         $this->assertEquals('ref_1', $actual->reference);
-        $this->assertEquals(4, $actual->count_total);
-        $this->assertEquals(2, $actual->count_commented);
-        $this->assertEquals(4, $actual->products_count);
+        $this->assertEquals(10, $actual->products_id_sum);
+        $this->assertEquals(10, $actual->products_quantity_sum);
+        $this->assertEquals(5600, $actual->products_price_sum);
 
     }
 
@@ -167,25 +164,24 @@ class AggregateTest extends TestCase
         $actual = Order::withSum(['products.id', 'products.quantity', 'products.price'])
         ->first();
 
-        dd($actual->toArray());
+        // dd($actual->toArray());
 
-        $expected = DB::select(
-            DB::raw('select (select sum(quantity) from "product_orders" where "orders"."id" = "product_orders"."order_id") as "products_quantity_sum" from "orders"')
-        )[0];
-
-        $this->assertEquals($expected->products_quantity_sum, $actual->products_quantity_sum);
+        $this->assertEquals('ref_1', $actual->reference);
+        $this->assertEquals(10, $actual->products_id_sum);
+        $this->assertEquals(10, $actual->products_quantity_sum);
+        $this->assertEquals(5600, $actual->products_price_sum);
     }
 
-    // public function testWithAvg()
-    // {
-    //     $actual = Order::withAvg('products.price')->first();
+    public function testWithAvg()
+    {
+        $actual = Order::withAvg('products.price')->first();
 
-    //     $expected = DB::select(
-    //         DB::raw('select (select avg(price) from "product_orders" where "orders"."id" = "product_orders"."order_id") as "products_avg_price" from "orders"')
-    //     )[0];
+        $expected = DB::select(
+            DB::raw('select (select avg(price) from "product_orders" where "orders"."id" = "product_orders"."order_id") as "products_price_avg" from "orders"')
+        )[0];
 
-    //     $this->assertEquals($expected->products_avg_price, $actual->products_avg_price);
-    // }
+        $this->assertEquals($expected->products_price_avg, $actual->products_price_avg);
+    }
 
     // public function testWithMin()
     // {
