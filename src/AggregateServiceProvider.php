@@ -77,14 +77,13 @@ class AggregateServiceProvider extends ServiceProvider
                 }
 
                 if (Str::contains($name, '.')) {
-                    list($relationName, $column) = explode('.', $name, 2);
+                    list($name, $column) = explode('.', $name, 2);
                 } else {
-                    // TODO: throw exception to force even COUNT() to wrap this itself
-                    $relationName = $name;
+                    // TODO: throw exception to force even COUNT() to wrap this itself?
                     $column = '*';
                 }
 
-                $relation = $this->getRelationWithoutConstraints($relationName);
+                $relation = $this->getRelationWithoutConstraints($name);
 
                 if ( is_string($constraints) ) {
                     $aggregateAlias = $constraints;
@@ -97,38 +96,23 @@ class AggregateServiceProvider extends ServiceProvider
                         // $query->select("$constraints(".$relation->getRelated()->qualifyColumn($column).")");
                     };
                 } else {
-                    // dd([$name, $constraints]);
-                    // $columns = $constraints->columns;
                     $aggregateAlias = 'aggregate';
                     $columns = null;
                 }
 
-
                 $query = $relation->getRelationExistenceAggregatesQuery(
                     $relation->getRelated()->newQuery(),
                     $this,
-                    $constraints,
                     $columns
-                    // (
-                    //     is_null($column) || $column === '*'
-                    //     ? $column
-                    //     : $relation->getRelated()->qualifyColumn($column)
-                    // )
                 );
 
                 $query->callScope($constraints);
 
                 $query = $query->mergeConstraintsFrom($relation->getQuery())->toBase();
 
-                // if (count($query->columns) > 1) {
-                //     $query->columns = [$query->columns[0]];
-                // }
-
-                // $columnAlias = $alias ?? Str::snake($relationName.'_'.strtolower($aggregate)).($column !== '*' ? '_'.$column : '');
-                $columnAlias = $alias ?? Str::snake(
+                $alias = $alias ?? Str::snake(
                     collect([
-                        $relationName,
-                        // $query->columns[0],
+                        $name,
                         (Str::endsWith($column, '*') ? null : $column),
                         strtolower($aggregateAlias),
                     ])
@@ -136,7 +120,7 @@ class AggregateServiceProvider extends ServiceProvider
                     ->join('_')
                 );
 
-                $this->selectSub($query, $columnAlias);
+                $this->selectSub($query, $alias);
             }
 
             return $this;
@@ -253,12 +237,11 @@ class AggregateServiceProvider extends ServiceProvider
      */
     protected function registerRelationMacros()
     {
-        Relation::macro('getRelationExistenceAggregatesQuery', function (EloquentBuilder $query, EloquentBuilder $parentQuery, $aggregate, $column) {
+        Relation::macro('getRelationExistenceAggregatesQuery', function (EloquentBuilder $query, EloquentBuilder $parentQuery, $column) {
             return $this->getRelationExistenceQuery(
                 $query,
                 $parentQuery,
                 new Expression($column),
-                // new Expression($column ? $aggregate."({$column})" : $aggregate)
             )->setBindings([], 'select');
         });
     }

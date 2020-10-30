@@ -176,12 +176,28 @@ class AggregateTest extends TestCase
     {
         $actual = Order::withAvg('products.price')->first();
 
-        $expected = DB::select(
-            DB::raw('select (select avg(price) from "product_orders" where "orders"."id" = "product_orders"."order_id") as "products_price_avg" from "orders"')
-        )[0];
-
-        $this->assertEquals($expected->products_price_avg, $actual->products_price_avg);
+        $this->assertEquals(1400, $actual->products_price_avg);
     }
+
+    public function testWithAvgWithAlias()
+    {
+        $actual = Order::withAvg('products.price AS mean_price')->first();
+
+        $this->assertEquals(1400, $actual->mean_price);
+    }
+
+    // public function testWithAvgWithConstraints()
+    // {
+    //     $actual = Order::withAvg([
+    //         'products.price AS mean_price_with_discounts' => function($query) {
+    //             $query->where('discount', '>', 0);
+    //         },
+    //     ])
+    //     ->dd()
+    //     ->first();
+
+    //     $this->assertEquals(1450, $actual->mean_price_with_discounts);
+    // }
 
     // public function testWithMin()
     // {
