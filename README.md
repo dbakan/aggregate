@@ -10,7 +10,11 @@ which is based off the work in [`laravel/framework#25319`](https://github.com/la
 ## Usage
 
 ```php
-Order::withSum('items.id as total_items', 'items.price', 'items.quantity');
+Order::withSum(
+    'items.id as total_items', 
+    'items.price as total_cost', 
+    'items.weight as total_weight',
+);
 ```
 
 ```php
