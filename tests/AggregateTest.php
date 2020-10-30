@@ -172,6 +172,31 @@ class AggregateTest extends TestCase
         $this->assertEquals(5600, $actual->products_price_sum);
     }
 
+    public function testWithSumWithWhereConstraints()
+    {
+        $actual = Order::withSum([
+            'products.price' => function($query) {
+                $query->where('discount', '>', 0);
+            },
+        ])
+        // ->dd()
+        ->first();
+
+        $this->assertEquals(2200, $actual->products_price_sum);
+    }
+
+    public function testWithSumWithCustomSelect()
+    {
+        $actual = Order::withSum([
+            'products.price' => function($query) {
+                $query->select(\db::raw('SUM(discount*price/100)'));
+            },
+        ])
+        ->first();
+
+        $this->assertEquals(306, $actual->products_price_sum);
+    }
+
     public function testWithAvg()
     {
         $actual = Order::withAvg('products.price')->first();
@@ -186,29 +211,29 @@ class AggregateTest extends TestCase
         $this->assertEquals(1400, $actual->mean_price);
     }
 
-    // public function testWithAvgWithConstraints()
-    // {
-    //     $actual = Order::withAvg([
-    //         'products.price AS mean_price_with_discounts' => function($query) {
-    //             $query->where('discount', '>', 0);
-    //         },
-    //     ])
-    //     ->dd()
-    //     ->first();
+    public function testWithAvgWithConstraints()
+    {
+        $actual = Order::withAvg([
+            'products.price AS mean_price_with_discounts' => function($query) {
+                $query->where('discount', '>', 0);
+            },
+        ])
+        // ->dd()
+        ->first();
 
-    //     $this->assertEquals(1450, $actual->mean_price_with_discounts);
-    // }
+        $this->assertEquals(1100, $actual->mean_price_with_discounts);
+    }
 
-    // public function testWithMin()
-    // {
-    //     $actual = Order::withMin('products.price')->first();
+    public function testWithMin()
+    {
+        $actual = Order::withMin('products.price')->first();
 
-    //     $expected = DB::select(
-    //         DB::raw('select (select min(price) from "product_orders" where "orders"."id" = "product_orders"."order_id") as "products_min_price" from "orders"')
-    //     )[0];
+        $expected = DB::select(
+            DB::raw('select (select min(price) from "product_orders" where "orders"."id" = "product_orders"."order_id") as "products_price_min" from "orders"')
+        )[0];
 
-    //     $this->assertEquals($expected->products_min_price, $actual->products_min_price);
-    // }
+        $this->assertEquals($expected->products_price_min, $actual->products_price_min);
+    }
 
     // public function testWithMax()
     // {

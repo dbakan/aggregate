@@ -11,6 +11,7 @@ use Illuminate\Database\Query\Grammars\SQLiteGrammar;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Str;
 use RuntimeException;
+use Closure;
 
 class AggregateServiceProvider extends ServiceProvider
 {
@@ -68,32 +69,14 @@ class AggregateServiceProvider extends ServiceProvider
                     throw new \Exception("no numeric keys here.");
                 }
 
-                $segments = explode(' ', $name);
-
-                if (count($segments) == 3 && Str::lower($segments[1]) == 'as') {
-                    list($name, $alias) = [$segments[0], $segments[2]];
-                } else {
-                    $alias = null;
-                }
-
-                if (Str::contains($name, '.')) {
-                    list($name, $column) = explode('.', $name, 2);
-                } else {
-                    // TODO: throw exception to force even COUNT() to wrap this itself?
-                    $column = '*';
-                }
-
+                [$name, $column, $alias] = $this->parseWithAggregateName($name);
                 $relation = $this->getRelationWithoutConstraints($name);
 
                 if ( is_string($constraints) ) {
                     $aggregateAlias = $constraints;
-                    $columns = new Expression("$constraints(".(
-                        $column === '*'
-                        ? $column
-                        : $relation->getRelated()->qualifyColumn($column)
-                    ).")");
+                    $columns = $this->compileAggregateFunction($relation, $constraints, $column);
                     $constraints = static function ($query) use($constraints, $column, $relation) {
-                        // $query->select("$constraints(".$relation->getRelated()->qualifyColumn($column).")");
+                        //
                     };
                 } else {
                     $aggregateAlias = 'aggregate';
@@ -110,15 +93,7 @@ class AggregateServiceProvider extends ServiceProvider
 
                 $query = $query->mergeConstraintsFrom($relation->getQuery())->toBase();
 
-                $alias = $alias ?? Str::snake(
-                    collect([
-                        $name,
-                        (Str::endsWith($column, '*') ? null : $column),
-                        strtolower($aggregateAlias),
-                    ])
-                    ->filter()
-                    ->join('_')
-                );
+                $alias = $alias ?? $this->getDefaultWithAggregateAlias($name, $column, $aggregateAlias);
 
                 $this->selectSub($query, $alias);
             }
@@ -126,6 +101,47 @@ class AggregateServiceProvider extends ServiceProvider
             return $this;
         });
 
+        EloquentBuilder::macro('compileAggregateFunction', function ($relation, $functionName, $column) {
+            return new Expression("$functionName(".(
+                $column === '*'
+                ? $column
+                : $relation->getRelated()->qualifyColumn($column)
+            ).")");
+        });
+
+        EloquentBuilder::macro('parseWithAggregateName', function ($name) {
+            $segments = explode(' ', $name);
+
+            if (count($segments) == 3 && Str::lower($segments[1]) == 'as') {
+                list($name, $alias) = [$segments[0], $segments[2]];
+            } else {
+                $alias = null;
+            }
+
+            if (Str::contains($name, '.')) {
+                list($name, $column) = explode('.', $name, 2);
+            } else {
+                // TODO: throw exception to force even COUNT() to wrap this itself?
+                $column = '*';
+            }
+
+            return [$name, $column, $alias];
+        });
+
+        EloquentBuilder::macro('getDefaultWithAggregateAlias', function ($name, $column, $functionName = null) {
+            return Str::snake(
+                collect([
+                    $name,
+                    (Str::endsWith($column, '*') ? null : $column),
+                    strtolower($functionName),
+                ])
+                ->filter()
+                ->join('_')
+            );
+        });
+
+
+        // @protected
         EloquentBuilder::macro('wrapBasicAggregate', function ($relations, $functionName) {
             $relations = is_array($relations) ? $relations : [$relations];
 
@@ -136,36 +152,62 @@ class AggregateServiceProvider extends ServiceProvider
                     $name = $constraints;
                     $constraints = $functionName;
                 }
+
+                // we may need these later:
+                [$relationName, $column, $alias] = $this->parseWithAggregateName($name);
+                if ( $constraints instanceof Closure ) {
+                    // Inject the default sleect if non present.
+                    $relation = $this->getRelationWithoutConstraints($relationName);
+
+                    $constraints = static function (EloquentBuilder $query) use ($constraints, $functionName, $relationName, $column, $alias, $relation) {
+                        // dd($constraints);
+                        $query->callScope($constraints);
+                        // At this point we can now check, if there are any SELECT columns set.
+                        // If not, we add the given for the `$functionName(...)`
+                        if (
+                            count($query->getQuery()->columns) === 1
+                            // && $query->getQuery()->columns[0] instanceof Expression
+                            && (string)$query->getQuery()->columns[0] == ""
+                        ) {
+                            $columns = $query->compileAggregateFunction($relation, $functionName, $column);
+                            $query->select($columns);
+                        }
+                    };
+                }
+
+                $alias = $alias ?? $this->getDefaultWithAggregateAlias($relationName, $column, $functionName);
+                $name = "$relationName.$column as $alias";
+
                 $results[$name] = $constraints;
             }
 
             return $this->withAggregate($results);
         });
 
-        EloquentBuilder::macro('withCounty', function ($relations) {
-            $relations = is_array($relations) ? $relations : [$relations];
-            // Add optional '.*' for convienience (typo??)
-            // TODO: add Test to prevent 'stores as total' becoming '(select count from ...) as total.*'
-            // TODO: make sure it works with and without `those.ticks`
-            $results = [];
-            foreach ($this->parseWithAggregateRelations($relations) as $name => $constraints) {
-                $segments = explode(' ', $name);
+        // EloquentBuilder::macro('withCounty', function ($relations) {
+        //     $relations = is_array($relations) ? $relations : [$relations];
+        //     // Add optional '.*' for convienience (typo??)
+        //     // TODO: add Test to prevent 'stores as total' becoming '(select count from ...) as total.*'
+        //     // TODO: make sure it works with and without `those.ticks`
+        //     $results = [];
+        //     foreach ($this->parseWithAggregateRelations($relations) as $name => $constraints) {
+        //         $segments = explode(' ', $name);
 
-                if (count($segments) == 3 && Str::lower($segments[1]) == 'as') {
-                    list($name, $alias) = [$segments[0], $segments[2]];
-                }
-                if (!Str::contains($name, '.')) {
-                    $name = $name.'.*';
-                }
-                if ($alias) {
-                    $name = $name.' as '.$alias;
-                }
+        //         if (count($segments) == 3 && Str::lower($segments[1]) == 'as') {
+        //             list($name, $alias) = [$segments[0], $segments[2]];
+        //         }
+        //         if (!Str::contains($name, '.')) {
+        //             $name = $name.'.*';
+        //         }
+        //         if ($alias) {
+        //             $name = $name.' as '.$alias;
+        //         }
 
-                $results[$name] = $constraints;
-            }
+        //         $results[$name] = $constraints;
+        //     }
 
-            return $this->withAggregate($results, 'count');
-        });
+        //     return $this->withAggregate($results, 'count');
+        // });
 
         EloquentBuilder::macro('withSum', function ($relations) {
             $relations = is_array($relations) ? $relations : func_get_args();
